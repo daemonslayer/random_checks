@@ -15,12 +15,13 @@ mean = np.array([0.485, 0.456, 0.406])
 std = np.array([0.229, 0.224, 0.225])
 
 class ImageDataset(Dataset):
-    def __init__(self, root, hr_shape):
+    def __init__(self, root, hr_shape, lr_shape):
         hr_height, hr_width = hr_shape
+        lr_height, lr_width = lr_shape
         # Transforms for low resolution images and high resolution images
         self.lr_transform = transforms.Compose(
             [
-                transforms.Resize((hr_height // 4, hr_height // 4), Image.BICUBIC),
+                transforms.Resize((lr_height, lr_width), Image.BICUBIC),
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std),
             ]

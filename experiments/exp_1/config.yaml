@@ -1,4 +1,7 @@
 title: 'exp_1'
+model:
+  generator: ''
+  discriminator: ''
 train:
   gpu: 1
   resume: False
@@ -35,6 +38,7 @@ evaluate:
     momentum: 1
     weight_decay: 1
 data:
+  path: '../../data/images' 
   hr_height: 256
   hr_width: 256
   lr_height: 128

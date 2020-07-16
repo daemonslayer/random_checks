@@ -101,4 +101,5 @@ class Discriminator(nn.Module):
         self.model = nn.Sequential(*layers)
 
     def forward(self, img):
+        print('Shape of image dataset: {}'.format(img.shape))
         return self.model(img)

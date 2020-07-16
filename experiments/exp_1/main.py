@@ -70,23 +70,16 @@ def main(args):
         feature_extractor_model.to(device)
         feature_extractor_model = nn.parallel.DistributedDataParallel(feature_extractor_model)
     elif config.gpu:
-        disc_model = nn.DataParallel(disc_model).to(device)
-        gen_model = nn.DataParallel(gen_model).to(device)
-        feature_extractor_model = nn.DataParallel(feature_extractor_model).to(device)
+        # disc_model = nn.DataParallel(disc_model).to(device)
+        # gen_model = nn.DataParallel(gen_model).to(device)
+        # feature_extractor_model = nn.DataParallel(feature_extractor_model).to(device)
+        disc_model = disc_model.to(device)
+        gen_model = gen_model.to(device)
+        feature_extractor_model = feature_extractor_model.to(device)
     else: return
 
-    # Data Loading
-    # train_dataset = torchvision.datasets.MNIST(root=os.path.join(parent_dir, 'data'),
-    #                                        train=True,
-    #                                        transform=transforms.ToTensor(),
-    #                                        download=True)
-
-    # test_dataset = torchvision.datasets.MNIST(root=os.path.join(parent_dir, 'data'),
-    #                                           train=False,
-    #                                           transform=transforms.ToTensor())
-
-    train_dataset = ImageDataset('../../data/images', hr_shape=(config.data.hr_height, config.data.hr_width))
-    test_dataset = ImageDataset('../../data/images', hr_shape=(config.data.hr_height, config.data.hr_width))
+    train_dataset = ImageDataset(config.data.path, hr_shape=(config.data.hr_height, config.data.hr_width), lr_shape=(config.data.lr_height, config.data.lr_width))
+    test_dataset = ImageDataset(config.data.path, hr_shape=(config.data.hr_height, config.data.hr_width), lr_shape=(config.data.lr_height, config.data.lr_width))
 
     if config.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -102,17 +95,24 @@ def main(args):
         num_workers=config.data.workers, pin_memory=config.data.pin_memory)
 
     if args.train:
-    	# trainer settings
-    	trainer = GANTrainer(config.train, train_loader, disc_model)
-    	criterion = nn.CrossEntropyLoss().to(device)
-    	optimizer = torch.optim.Adam(disc_model.parameters(), config.train.hyperparameters.lr)
-    	trainer.setCriterion(criterion)
-    	trainer.setOptimizer(optimizer)
+        # trainer settings
+        trainer = GANTrainer(config.train, train_loader, (disc_model, gen_model, feature_extractor_model))
+        criterion = nn.MSELoss().to(device)
+        disc_optimizer = torch.optim.Adam(disc_model.parameters(), config.train.hyperparameters.lr)
+        gen_optimizer = torch.optim.Adam(gen_model.parameters(), config.train.hyperparameters.lr)
+        fe_optimizer = torch.optim.Adam(feature_extractor_model.parameters(), config.train.hyperparameters.lr)
+
+        trainer.setCriterion(criterion)
+        trainer.setDiscOptimizer(disc_optimizer)
+        trainer.setGenOptimizer(gen_optimizer)
+        trainer.setFEOptimizer(fe_optimizer)
+
+
     	# evaluator settings
-    	evaluator = GANEvaluator(config.evaluate, val_loader, disc_model)
-    	optimizer = torch.optim.Adam(disc_model.parameters(), lr=config.evaluate.hyperparameters.lr, 
-    		weight_decay=config.evaluate.hyperparameters.weight_decay)
-    	evaluator.setCriterion(criterion)
+        evaluator = GANEvaluator(config.evaluate, val_loader, (disc_model, gen_model, feature_extractor_model))
+        # optimizer = torch.optim.Adam(disc_model.parameters(), lr=config.evaluate.hyperparameters.lr, 
+        # 	weight_decay=config.evaluate.hyperparameters.weight_decay)
+        evaluator.setCriterion(criterion)
 
     if args.test:
     	pass

@@ -8,24 +8,27 @@ from tensorboardX import SummaryWriter
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 # TODO: check if new object required per script
 summary_writer = SummaryWriter()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Trainer(object):
     """docstring for Trainer"""
-    def __init__(self, config=None, data=None, model=None):
+    def __init__(self, config=None, data=None, models=None):
         super(Trainer, self).__init__()
         self.config = config
         self.data = data
 
         self.train_loss = 0
         self.criterion = None
-        self.optimizer = None
+        self.disc_optimizer = None
+        self.gen_optimizer = None
+        self.fe_optimizer = None
         self.curr_lr = 0
         self.start_epoch = 0
         self.best_precision = 0
-        self.model = model
+        self.disc_model, self.gen_model, self.feature_extractor_model = models
 
     def setConfig(self, config):
         self.config = config
@@ -44,8 +47,16 @@ class Trainer(object):
         self.criterion = criterion
         return True
 
-    def setOptimizer(self, optimizer):
-        self.optimizer = optimizer
+    def setDiscOptimizer(self, optimizer):
+        self.disc_optimizer = optimizer
+        return True
+
+    def setGenOptimizer(self, optimizer):
+        self.gen_optimizer = optimizer
+        return True
+
+    def setFEOptimizer(self, optimizer):
+        self.fe_optimizer = optimizer
         return True
 
     def count_parameters(self):
@@ -93,7 +104,7 @@ class Trainer(object):
     def adjust_learning_rate(self, epoch: int):
         """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
         self.curr_lr = self.config.hyperparameters.lr * (self.config.hyperparameters.lr_decay ** (epoch // self.config.hyperparameters.lr_decay_epoch))
-        for param_group in self.optimizer.param_groups:
+        for param_group in self.disc_optimizer.param_groups:
             param_group['lr'] = self.curr_lr
 
     def train(self, epoch: int):
@@ -102,25 +113,37 @@ class Trainer(object):
 
 class GANTrainer(Trainer):
     def train(self, epoch: int):
-        if self.model is None:
-            raise ValueError('[-] No model has been provided')
+        if self.disc_model is None or self.gen_model is None or self.feature_extractor_model is None:
+            raise ValueError('[-] Models has been provided')
         if self.config is None:
             raise ValueError('[-] No Configurations present')
         if self.criterion is None:
             raise ValueError('[-] Loss Function hasn\'t been mentioned for the model')
-        if self.optimizer is None:
-            raise ValueError('[-] Optimizer hasn\'t been mentioned for the model')
+        if self.disc_optimizer is None or self.gen_optimizer is None or self.fe_optimizer is None:
+            raise ValueError('[-] Optimizers haven\'t been mentioned for the models')
         if self.data is None:
             raise ValueError('[-] No Data available to train on')
+        
+
         self.train_loss = 0
-        self.model.train()
+        self.disc_model.train()
+        self.gen_model.train()
+        self.feature_extractor_model.train()
+        
         for batch_idx, (lr_images, hr_images) in enumerate(self.data):
             if self.config.gpu:
                 lr_images = lr_images.to(device)
                 hr_images = hr_images.to(device)
 
-            output = self.model(lr_images)
-            loss = self.criterion(output, hr_images)
+            # Adversarial ground truths
+            Tensor = torch.cuda.LongTensor if self.config.gpu else torch.LongTensor
+            valid = Variable(Tensor(np.ones((lr_images.size(0), *self.disc_model.output_shape))), requires_grad=False)
+            fake = Variable(Tensor(np.zeros((lr_images.size(0), *self.disc_model.output_shape))), requires_grad=False)
+
+            output = self.disc_model(hr_images)
+            print('Shape of Valid tensor: {}'.format(valid.shape))
+            print('Shape of Output tensor: {}'.format(output.shape))
+            loss = self.criterion(output, valid)
 
             self.optimizer.zero_grad()
             loss.backward()
