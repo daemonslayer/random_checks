@@ -14,13 +14,17 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Evaluator(object):
     """docstring for Evaluator"""
-    def __init__(self, config=None, data=None, model=None):
+    def __init__(self, config=None, data=None, models=None):
         super(Evaluator, self).__init__()
         self.config = config
         self.data = data
+
         self.eval_loss = 0
-        self.model = model
+        self.disc_model, self.gen_model, self.feature_extractor_model = models
         self.criterion = None
+        self.disc_optimizer = None
+        self.gen_optimizer = None
+        self.fe_optimizer = None
         ## visualization config
         # self.visualizer = None
 
@@ -38,6 +42,18 @@ class Evaluator(object):
 
     def setCriterion(self, criterion):
         self.criterion = criterion
+        return True
+
+    def setDiscOptimizer(self, optimizer):
+        self.disc_optimizer = optimizer
+        return True
+
+    def setGenOptimizer(self, optimizer):
+        self.gen_optimizer = optimizer
+        return True
+
+    def setFEOptimizer(self, optimizer):
+        self.fe_optimizer = optimizer
         return True
 
     def load_saved_checkpoint(self, checkpoint=None):
@@ -63,8 +79,8 @@ class Evaluator(object):
 
 class GANEvaluator(Evaluator):
     def evaluate(self, epoch):
-        if self.model is None:
-            raise ValueError('[-] No model has been provided')
+        if self.disc_model is None or self.gen_model is None or self.feature_extractor_model is None:
+            raise ValueError('[-] Models has been provided')
         if self.config is None:
             raise ValueError('[-] No Configurations present')
         if self.criterion is None:
@@ -77,14 +93,19 @@ class GANEvaluator(Evaluator):
         # eval mode
         self.model.eval()
         with torch.no_grad():
-            for batch_idx, (images, labels) in enumerate(self.data):
+            for batch_idx, (lr_images, hr_images) in enumerate(self.data):
                 if self.config.gpu:
-                    images = images.to(device)
-                    labels = labels.to(device)
+                    lr_images = lr_images.to(device)
+                    hr_images = hr_images.to(device)
+
+                # Adversarial ground truths
+                Tensor = torch.cuda.FloatTensor if self.config.gpu else torch.FloatTensor
+                valid = Variable(Tensor(np.ones((lr_images.size(0), *self.disc_model.output_shape))), requires_grad=False)
+                fake = Variable(Tensor(np.zeros((lr_images.size(0), *self.disc_model.output_shape))), requires_grad=False)
 
                 # compute output
-                output = self.model(images)
-                self.eval_loss = self.criterion(output, labels).item()
+                output = self.disc_model(hr_images)
+                self.eval_loss = self.criterion(output, valid).item()
 
                 # get the index of the max log-probability
                 pred = output.max(1, keepdim=True)[1]
