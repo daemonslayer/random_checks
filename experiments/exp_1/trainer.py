@@ -136,7 +136,7 @@ class GANTrainer(Trainer):
                 hr_images = hr_images.to(device)
 
             # Adversarial ground truths
-            Tensor = torch.cuda.LongTensor if self.config.gpu else torch.LongTensor
+            Tensor = torch.cuda.FloatTensor if self.config.gpu else torch.FloatTensor
             valid = Variable(Tensor(np.ones((lr_images.size(0), *self.disc_model.output_shape))), requires_grad=False)
             fake = Variable(Tensor(np.zeros((lr_images.size(0), *self.disc_model.output_shape))), requires_grad=False)
 
@@ -145,10 +145,10 @@ class GANTrainer(Trainer):
             print('Shape of Output tensor: {}'.format(output.shape))
             loss = self.criterion(output, valid)
 
-            self.optimizer.zero_grad()
+            self.disc_optimizer.zero_grad()
             loss.backward()
             self.train_loss = loss.item()
-            self.optimizer.step()
+            self.disc_optimizer.step()
 
             summary_writer.add_scalar('train_loss', loss.item())
             if batch_idx % self.config.logs.log_interval == 0:
